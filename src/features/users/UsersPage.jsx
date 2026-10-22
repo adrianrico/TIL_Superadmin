@@ -1,10 +1,10 @@
 // Página principal: cabecera, acciones, filtros y lista (tabla en escritorio, cards en móvil).
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Grid, Space, Typography } from 'antd';
-import { FilterOutlined, LogoutOutlined, PlusOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Grid, Space } from 'antd';
+import { FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { errorMessage } from '../../api/http.js';
+import NavBar from '../../components/NavBar.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
-import { useAuth } from '../../context/AuthContext.jsx';
 import { useLoader } from '../../context/LoaderContext.jsx';
 import CredentialsModal from './components/CredentialsModal.jsx';
 import FiltersDrawer from './components/FiltersDrawer.jsx';
@@ -18,7 +18,6 @@ import { useUsers } from './hooks/useUsers.js';
 const PAGE_SIZE = 10;
 
 export default function UsersPage() {
-  const { user, logout } = useAuth();
   const screens = Grid.useBreakpoint();
   const isMobile = screens.sm === false; // < 576px: data cards
   const inlineFilters = screens.lg === true; // ≥ 992px: panel en línea; si no, Drawer
@@ -58,18 +57,11 @@ export default function UsersPage() {
   const filtered = hasActiveFilters(filters);
 
   return (
-    <main className="til-page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Typography.Title level={2} style={{ margin: 0 }}>
-          TIL Administrator
-        </Typography.Title>
-        <Button icon={<LogoutOutlined />} onClick={logout}>
-          Cerrar sesión ({user.username})
-        </Button>
-      </div>
-
+    <>
+      <NavBar />
+      <main className="til-page">
       {/* Botón de alta SIEMPRE visible */}
-      <Space className="til-actions" style={{ margin: '24px 0 16px', width: isMobile ? '100%' : undefined }} wrap>
+      <Space className="til-actions" style={{ margin: '0 0 16px', width: isMobile ? '100%' : undefined }} wrap>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormUser({})}>
           Registrar usuario
         </Button>
@@ -81,7 +73,7 @@ export default function UsersPage() {
       </Space>
 
       {inlineFilters && (
-        <Card style={{ marginBottom: 16 }}>
+        <Card className="til-filters-card" style={{ marginBottom: 16 }}>
           <FiltersPanel live value={filters} onApply={applyFilters} />
         </Card>
       )}
@@ -115,6 +107,7 @@ export default function UsersPage() {
       <UserFormModal open={formUser !== null} user={formUser?.id ? formUser : null} onClose={() => setFormUser(null)} />
       <CredentialsModal credentials={credentials} onClose={() => setCredentials(null)} />
       <FiltersDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} value={filters} onApply={applyFilters} />
-    </main>
+      </main>
+    </>
   );
 }

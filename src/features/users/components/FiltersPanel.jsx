@@ -1,8 +1,8 @@
 // Controles de filtro y orden. Mantiene un borrador local:
-//  - modo "live" (escritorio, panel en línea): aplica solo tras 400 ms sin cambios
-//  - modo drawer: aplica al pulsar "Aplicar"
+//  - modo "live" (escritorio): una fila compacta que aplica tras 400 ms sin cambios
+//  - modo drawer: columna con botones, aplica al pulsar "Aplicar"
 import { useEffect, useRef, useState } from 'react';
-import { Button, DatePicker, Input, Segmented, Select, Space, Switch, Typography } from 'antd';
+import { Button, DatePicker, Input, Segmented, Select, Space, Typography } from 'antd';
 import { ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import { DEFAULT_FILTERS } from '../filters.js';
 
@@ -41,83 +41,111 @@ export default function FiltersPanel({ value, onApply, live = false, onDone }) {
     onDone?.();
   };
 
-  // Los dos switches son mutuamente excluyentes
-  const toggleAccess = (kind) => (checked) => patch({ access: checked ? kind : 'all' });
+  const size = live ? 'small' : 'middle';
+  // En modo compacto el texto de apoyo va como etiqueta pequeña sobre el control
+  const field = (label, control, cls = '') => (
+    <div className={`til-filter ${cls}`}>
+      <Typography.Text type="secondary" className="til-filter__label">
+        {label}
+      </Typography.Text>
+      {control}
+    </div>
+  );
 
+  const search = (
+    <Input allowClear size={size} value={draft.search} maxLength={120} placeholder="Buscar por nombre" onChange={(e) => patch({ search: e.target.value })} />
+  );
+  const phone = (
+    <Input
+      allowClear
+      size={size}
+      value={draft.phone}
+      maxLength={16}
+      inputMode="tel"
+      placeholder="Solo dígitos o +"
+      onChange={(e) => patch({ phone: e.target.value.replace(/[^\d+]/g, '') })}
+    />
+  );
+  const dateMode = (
+    <Segmented
+      block={!live}
+      size={size}
+      value={draft.dateMode}
+      options={[
+        { value: 'single', label: 'Fecha única' },
+        { value: 'range', label: 'Rango' },
+      ]}
+      onChange={(mode) => patch({ dateMode: mode })}
+    />
+  );
+  const datePicker =
+    draft.dateMode === 'single' ? (
+      <DatePicker size={size} style={{ width: '100%' }} format="DD/MM/YYYY" value={draft.date} onChange={(date) => patch({ date })} />
+    ) : (
+      <DatePicker.RangePicker size={size} style={{ width: '100%' }} format="DD/MM/YYYY" value={draft.range} onChange={(range) => patch({ range })} />
+    );
+  // Toggle de tres estados: Todos / Con acceso / Restringidos
+  const accessToggle = (
+    <Segmented
+      block={!live}
+      size={size}
+      value={draft.access}
+      options={[
+        { value: 'all', label: 'Todos' },
+        { value: 'allowed', label: 'Con acceso' },
+        { value: 'restricted', label: 'Restringidos' },
+      ]}
+      onChange={(access) => patch({ access })}
+    />
+  );
+  const sort = (
+    <Space.Compact block>
+      <Select size={size} style={{ flex: 1, minWidth: 150 }} value={draft.sortBy} options={SORT_OPTIONS} onChange={(sortBy) => patch({ sortBy })} />
+      <Segmented
+        size={size}
+        value={draft.order}
+        options={[
+          { value: 'asc', icon: <ArrowUpOutlined aria-label="Ascendente" /> },
+          { value: 'desc', icon: <ArrowDownOutlined aria-label="Descendente" /> },
+        ]}
+        onChange={(order) => patch({ order })}
+      />
+    </Space.Compact>
+  );
+
+  // Escritorio: todo en una fila que se ajusta al ancho disponible
+  if (live) {
+    return (
+      <div className="til-filters-row">
+        {field('Nombre', search, 'til-filter--grow')}
+        {field('Teléfono', phone, 'til-filter--phone')}
+        {field('Fecha de registro', <Space size={6}>{dateMode}<div style={{ width: draft.dateMode === 'range' ? 230 : 140 }}>{datePicker}</div></Space>)}
+        {field('Acceso', accessToggle)}
+        {field('Ordenar por', sort)}
+        <Button size="small" onClick={clear}>
+          Limpiar
+        </Button>
+      </div>
+    );
+  }
+
+  // Drawer: columna
   return (
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <div>
-        <Typography.Text type="secondary">Nombre</Typography.Text>
-        <Input allowClear value={draft.search} maxLength={120} placeholder="Buscar por nombre" onChange={(e) => patch({ search: e.target.value })} />
-      </div>
-
-      <div>
-        <Typography.Text type="secondary">Teléfono</Typography.Text>
-        <Input
-          allowClear
-          value={draft.phone}
-          maxLength={16}
-          inputMode="tel"
-          placeholder="Solo dígitos o +"
-          onChange={(e) => patch({ phone: e.target.value.replace(/[^\d+]/g, '') })}
-        />
-      </div>
-
+    <Space orientation="vertical" size="middle" className="til-filters-panel" style={{ width: "100%" }}>
+      {field('Nombre', search)}
+      {field('Teléfono', phone)}
       <div>
         <Typography.Text type="secondary">Fecha de registro</Typography.Text>
-        <Segmented
-          block
-          value={draft.dateMode}
-          options={[
-            { value: 'single', label: 'Fecha única' },
-            { value: 'range', label: 'Rango' },
-          ]}
-          onChange={(dateMode) => patch({ dateMode })}
-          style={{ marginBottom: 8 }}
-        />
-        {draft.dateMode === 'single' ? (
-          <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" value={draft.date} onChange={(date) => patch({ date })} />
-        ) : (
-          <DatePicker.RangePicker style={{ width: '100%' }} format="DD/MM/YYYY" value={draft.range} onChange={(range) => patch({ range })} />
-        )}
+        <div style={{ marginBottom: 8 }}>{dateMode}</div>
+        {datePicker}
       </div>
-
-      <div>
-        <Typography.Text type="secondary">Acceso</Typography.Text>
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            Solo con acceso
-            <Switch checked={draft.access === 'allowed'} onChange={toggleAccess('allowed')} />
-          </label>
-          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            Solo restringidos
-            <Switch checked={draft.access === 'restricted'} onChange={toggleAccess('restricted')} />
-          </label>
-        </Space>
-      </div>
-
-      <div>
-        <Typography.Text type="secondary">Ordenar por</Typography.Text>
-        <Space.Compact block>
-          <Select style={{ flex: 1 }} value={draft.sortBy} options={SORT_OPTIONS} onChange={(sortBy) => patch({ sortBy })} />
-          <Segmented
-            value={draft.order}
-            options={[
-              { value: 'asc', icon: <ArrowUpOutlined aria-label="Ascendente" /> },
-              { value: 'desc', icon: <ArrowDownOutlined aria-label="Descendente" /> },
-            ]}
-            onChange={(order) => patch({ order })}
-          />
-        </Space.Compact>
-      </div>
-
+      {field('Acceso', accessToggle)}
+      {field('Ordenar por', sort)}
       <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
         <Button onClick={clear}>Limpiar filtros</Button>
-        {!live && (
-          <Button type="primary" onClick={apply}>
-            Aplicar
-          </Button>
-        )}
+        <Button type="primary" onClick={apply}>
+          Aplicar
+        </Button>
       </Space>
     </Space>
   );

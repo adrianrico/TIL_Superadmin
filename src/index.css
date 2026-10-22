@@ -132,8 +132,6 @@ body {
 /* ---------- Layout de página ---------- */
 .til-page {
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
   padding: var(--til-page-pad);
 }
 
@@ -170,4 +168,128 @@ body {
   body {
     font-size: 14px;
   }
+}
+
+/* ---------- Barra superior fija ---------- */
+.til-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--til-glass-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--til-border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.til-navbar__inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px var(--til-page-pad);
+}
+/* Primer bloque tras la barra: separación del contenido */
+.til-navbar + .til-page {
+  padding-top: 24px;
+}
+@media (max-width: 576px) {
+  .til-navbar__title.ant-typography {
+    font-size: 18px;
+  }
+  .til-navbar__user {
+    display: none;
+  }
+}
+
+/* ---------- Filtros ---------- */
+.til-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.til-filter__label {
+  font-size: 12px;
+}
+.til-switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+/* Escritorio: una sola fila compacta que envuelve si falta espacio */
+.til-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 16px;
+}
+.til-filters-row .til-filter--grow {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+.til-filters-row .til-filter--phone {
+  width: 150px;
+}
+.til-filters-row .til-switch-row {
+  gap: 6px;
+  min-height: 24px;
+}
+/* Tarjeta de filtros en línea: menos relleno */
+.til-filters-card.ant-card .ant-card-body {
+  padding: 10px 14px;
+}
+
+/* ---------- Segmented (toggles de selección): opción activa resaltada ---------- */
+.ant-segmented {
+  background: rgba(0, 18, 48, 0.55) !important;
+  border: 1px solid var(--til-border);
+}
+.ant-segmented .ant-segmented-thumb,
+.ant-segmented .ant-segmented-item-selected {
+  background: var(--til-primary) !important;
+  box-shadow: 0 0 10px rgba(6, 149, 228, 0.55);
+}
+.ant-segmented .ant-segmented-item-selected,
+.ant-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+  color: #fff !important;
+  font-weight: 600;
+}
+.ant-segmented .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+  color: var(--til-heading);
+}
+
+/* ---------- Bordes redondeados en filtros ---------- */
+.til-filters-card.ant-card {
+  border-radius: 16px;
+}
+.til-filters-card .ant-input-affix-wrapper,
+.til-filters-card .ant-input,
+.til-filters-card .ant-select .ant-select-selector,
+.til-filters-card .ant-picker,
+.til-filters-card .ant-btn,
+.til-filters-panel .ant-input-affix-wrapper,
+.til-filters-panel .ant-input,
+.til-filters-panel .ant-select .ant-select-selector,
+.til-filters-panel .ant-picker,
+.til-filters-panel .ant-btn {
+  border-radius: 12px !important;
+}
+/* Segmented: contenedor y opción activa redondeados */
+.til-filters-card .ant-segmented,
+.til-filters-panel .ant-segmented,
+.til-filters-card .ant-segmented .ant-segmented-thumb,
+.til-filters-panel .ant-segmented .ant-segmented-thumb,
+.til-filters-card .ant-segmented .ant-segmented-item,
+.til-filters-panel .ant-segmented .ant-segmented-item {
+  border-radius: 12px !important;
+}
+/* Select + dirección de orden: radio solo en los extremos del grupo */
+.til-filters-card .ant-space-compact > :first-child .ant-select-selector,
+.til-filters-panel .ant-space-compact > :first-child .ant-select-selector {
+  border-radius: 12px 0 0 12px !important;
+}
+.til-filters-card .ant-space-compact > :last-child.ant-segmented,
+.til-filters-panel .ant-space-compact > :last-child.ant-segmented {
+  border-radius: 0 12px 12px 0 !important;
 }
