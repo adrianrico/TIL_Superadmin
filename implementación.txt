@@ -1,0 +1,318 @@
+================================================================================
+ PLAN DE DESARROLLO E IMPLEMENTACIÓN — (A) TIL_SUPERADMIN (FRONTEND)
+ React + Vite + Ant Design (tema glassmorphism oscuro azul)
+ Repositorio: https://github.com/adrianrico/TIL_Superadmin.git
+ Despliegue: Render (Static Site, manual)
+================================================================================
+
+0. RESUMEN EJECUTIVO
+--------------------
+Panel "TIL_ADMINISTRATOR": alta, listado, filtros, edición, toggle de acceso,
+generación de claves y eliminación de usuarios de otra web app. Consume la API
+de TIL_Backend (/api/v1).
+
+Decisiones de arquitectura:
+  - SPA con React 18 + Vite (build rápido, salida estática para Render).
+  - Estructura "feature-based" (por funcionalidad): cada feature agrupa sus
+    componentes, hooks y llamadas API. Escala mejor que "components/pages/utils"
+    globales.
+  - Estado del servidor con TanStack Query (caché, reintentos, invalidación);
+    estado de UI local con useState/Context. No hace falta Redux.
+  - Capa API única (axios) con interceptores: adjunta el access token y
+    renueva sesión automáticamente con el refresh (cookie httpOnly).
+  - Ant Design 5 con ConfigProvider (darkAlgorithm + tokens) + index.css que
+    refuerza el glassmorphism.
+  - Seguridad: token de acceso SOLO en memoria (no localStorage), rutas
+    protegidas, sin secretos en el front, escape por defecto de React.
+
+Stack: react, react-dom, react-router-dom, antd, @ant-design/icons, axios,
+@tanstack/react-query, dayjs, zod (opcional validar formularios), eslint,
+vitest + @testing-library/react.
+
+--------------------------------------------------------------------------------
+1. ESTRUCTURA DE CARPETAS (Desktop\TIL_Superadmin)
+--------------------------------------------------------------------------------
+TIL_Superadmin/
+├── index.html
+├── vite.config.js
+├── package.json
+├── .env.example               # VITE_API_URL=http://localhost:4000/api/v1
+├── .gitignore
+├── public/
+│   └── _redirects             # "/*  /index.html  200"  (SPA en Render)
+├── implementación.txt
+└── src/
+    ├── main.jsx               # ConfigProvider (tema) + QueryClient + Router
+    ├── App.jsx                # Rutas
+    ├── index.css              # Tema global glass/neumorfismo + responsive
+    ├── theme/
+    │   └── themeConfig.js     # tokens de AntD (colores, radius, algoritmo)
+    ├── api/
+    │   ├── http.js            # instancia axios + interceptores + refresh
+    │   ├── auth.api.js
+    │   └── tilUsers.api.js
+    ├── context/
+    │   ├── AuthContext.jsx    # sesión del admin (token en memoria)
+    │   └── LoaderContext.jsx  # loader global (overlay blur)
+    ├── components/            # Reutilizables sin lógica de negocio
+    │   ├── WaveBackground.jsx # olas SVG animadas + parallax
+    │   ├── GlobalLoader.jsx
+    │   ├── ProtectedRoute.jsx
+    │   └── EmptyState.jsx     # "sin registros todavía"
+    ├── features/
+    │   ├── auth/
+    │   │   └── LoginPage.jsx
+    │   └── users/
+    │       ├── UsersPage.jsx          # página principal (lista + botón nuevo)
+    │       ├── components/
+    │       │   ├── UsersTable.jsx     # vista tabla (desktop)
+    │       │   ├── UserCards.jsx      # data cards colapsables (móvil)
+    │       │   ├── FiltersPanel.jsx   # filtros (contenido del Drawer)
+    │       │   ├── FiltersDrawer.jsx  # drawer desde la derecha
+    │       │   ├── UserFormModal.jsx  # alta / edición
+    │       │   ├── CredentialsModal.jsx # muestra clave generada UNA vez
+    │       │   └── AccessSwitch.jsx   # toggle permitir/restringir
+    │       └── hooks/
+    │           ├── useUsers.js        # useQuery con filtros
+    │           └── useUserMutations.js# crear/editar/toggle/credenciales/eliminar
+    └── utils/
+        ├── format.js          # formateo de fechas (dayjs)
+        └── useBreakpoint.js   # (o Grid.useBreakpoint de antd)
+
+--------------------------------------------------------------------------------
+2. PASO A PASO DE IMPLEMENTACIÓN
+--------------------------------------------------------------------------------
+
+PASO 1 — Crear el proyecto
+  cd Desktop ; npm create vite@latest TIL_Superadmin -- --template react
+  cd TIL_Superadmin ; git init
+  npm i antd @ant-design/icons axios react-router-dom @tanstack/react-query dayjs
+  npm run dev    (http://localhost:5173)
+  Variables: .env  ->  VITE_API_URL=http://localhost:4000/api/v1
+  (Solo variables con prefijo VITE_ llegan al navegador y son PÚBLICAS: nunca
+  poner secretos aquí.)
+
+PASO 2 — Tema de Ant Design (src/theme/themeConfig.js y main.jsx)
+  import { theme } from 'antd';
+  export const themeConfig = {
+    algorithm: theme.darkAlgorithm,
+    token: {
+      colorPrimary: '#0695E4',          // azul cian brillante
+      colorBgBase: '#010d1a',           // fondo casi negro azulado
+      colorBgContainer: 'rgba(0, 18, 48, 0.35)',
+      colorBgElevated: 'rgba(0, 18, 48, 0.92)',   // modales/popovers
+      colorText: '#c9d8e8',             // cuerpo
+      colorTextHeading: '#e8f4ff',      // títulos
+      colorTextSecondary: '#7aafc8',    // texto muted
+      colorBorder: 'rgba(6, 149, 228, 0.25)',
+      colorBorderSecondary: 'rgba(6, 149, 228, 0.14)',
+      borderRadius: 8,
+    },
+  };
+  main.jsx:
+    <ConfigProvider theme={themeConfig} locale={esES}>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter><AuthProvider><LoaderProvider><App/></LoaderProvider></AuthProvider></BrowserRouter>
+      </QueryClientProvider>
+    </ConfigProvider>
+  (importar dayjs/locale/es y antd/locale/es_ES).
+
+PASO 3 — CSS global glassmorphism + neumorfismo (src/index.css)
+  3.1 Variables CSS :root  (--til-primary:#0695E4; --til-bg:#010d1a; etc.)
+  3.2 body:
+      background-color: #010d1a;
+      background-image:
+        radial-gradient(ellipse at 20% 10%, #0659ba55, transparent 55%),
+        radial-gradient(ellipse at 80% 30%, #0695E444, transparent 50%),
+        radial-gradient(ellipse at 50% 100%, #00b4d833, transparent 55%);
+      background-attachment: fixed;
+      color: #c9d8e8; margin:0; min-height:100vh;
+  3.3 Sobrescritura de clases internas de AntD (con !important donde AntD
+      inyecta estilos por CSS-in-JS) para: .ant-table, .ant-table-thead>tr>th,
+      .ant-table-tbody>tr>td, .ant-input, .ant-input-affix-wrapper,
+      .ant-select-selector, .ant-picker, .ant-modal-content, .ant-drawer-content,
+      .ant-popover-inner, .ant-dropdown-menu, .ant-btn, .ant-collapse, .ant-card:
+          background: rgba(0, 18, 48, 0.35) !important;
+          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(6,149,228,.18) !important;
+      Modales/popovers/desplegables: fondo más opaco (rgba(0,18,48,.92)).
+  3.4 Neumorfismo (.ant-card y tablas, NO dentro de modales):
+          box-shadow: 6px 6px 14px rgba(0,0,0,.55),
+                     -4px -4px 12px rgba(6,149,228,.10);
+          transition: transform .2s, box-shadow .2s;
+      &:hover { transform: translateY(-2px); }
+      .ant-modal .ant-card, .ant-modal .ant-table { box-shadow:none; transform:none; }
+      (estilo "glass plano" dentro de modales).
+  3.5 Animaciones: @keyframes til-spin { to { transform: rotate(360deg);} }
+      @keyframes til-wave { from {transform:translateX(0)} to {transform:translateX(-50%)} }
+  3.6 Responsive (media queries clave): 400px, 576px, 992px, 1100px
+      - ≤1100px: reducir paddings de contenedor, tabla con scroll-x.
+      - ≤992px : navbar/menú colapsa a Drawer; filtros pasan a Drawer.
+      - ≤576px : tabla -> data cards; botones a ancho completo; filtros
+                 apilados (flex-direction: column).
+      - ≤400px : paddings mínimos, fuentes y alturas de tarjeta reducidas.
+
+PASO 4 — WaveBackground (src/components/WaveBackground.jsx)
+  - position: fixed; inset:0; z-index:-1; pointer-events:none.
+  - 4 capas <svg> con <path> de ola (ancho 200% para loop continuo), colores
+    azules con opacidad decreciente: #0695E4 .35, #0659ba .25, #00b4d8 .18,
+    #0659ba .10.
+  - Animación CSS til-wave infinita con duraciones distintas por capa (p.ej.
+    18s, 24s, 32s, 42s) y sentidos alternos.
+  - Parallax por scroll: useEffect con listener 'scroll' (passive:true) +
+    requestAnimationFrame que ajusta translateY de cada capa según
+    window.scrollY * factor (0.02, 0.04, 0.06, 0.08). Limpiar el listener.
+  - Respetar `prefers-reduced-motion: reduce` (desactivar animación/parallax).
+
+PASO 5 — Loader global
+  - LoaderContext expone show()/hide() con contador (para peticiones
+    simultáneas). Se conecta a los interceptores de axios (o a isFetching/
+    isMutating de React Query).
+  - GlobalLoader: overlay fixed full-screen, rgba(1,13,26,.6) + blur(6px),
+    tarjeta glass centrada con un círculo giratorio (animation: til-spin 1s
+    linear infinite; borde superior en #0695E4). role="status" aria-live.
+
+PASO 6 — Capa API y sesión (SEGURIDAD)
+  api/http.js:
+    const http = axios.create({ baseURL: import.meta.env.VITE_API_URL,
+                                withCredentials: true });  // cookie refresh
+    - Interceptor request: añade Authorization: Bearer <accessToken en memoria>.
+    - Interceptor response: si 401 y no es /auth/*, llama POST /auth/refresh
+      UNA vez (cola de peticiones en espera), guarda el nuevo token y
+      reintenta; si falla -> logout y redirección a /login.
+  AuthContext:
+    - accessToken en una variable de módulo/ref (NO localStorage/sessionStorage)
+      => inmune a robo por XSS de storage. Al recargar la página se llama
+      /auth/refresh para recuperar sesión (cookie httpOnly).
+    - login(), logout(), user, isAuthenticated, isLoading.
+  ProtectedRoute: si no hay sesión -> <Navigate to="/login" replace />.
+  LoginPage: formulario (usuario/contraseña), mensaje genérico en error,
+    deshabilitar botón mientras envía, manejar 429/423 ("demasiados intentos").
+    NO precargar ni mostrar la contraseña; NO incluirla en el código del front.
+    (El usuario MAYLOB_CONTROL y su password viven en el backend como hash.)
+
+PASO 7 — Página principal (features/users/UsersPage.jsx)
+  Layout:
+   - Header: título "TIL Administrator", botón "Cerrar sesión".
+   - Barra de acciones: BOTÓN "Registrar usuario" SIEMPRE visible (tipo
+     primary, con icono), botón "Filtros" (abre Drawer), búsqueda rápida.
+   - Contenido: tabla (desktop) o data cards (móvil).
+   - Estado vacío (sin registros): <EmptyState/> con texto centrado en el
+     fondo: "sin registros todavía" (color muted #7aafc8). Si hay filtros
+     activos y 0 resultados, mostrar "sin resultados para los filtros".
+  Datos: useUsers(filters) -> GET /til-users?search&phone&date&dateFrom&dateTo&
+     access&sortBy&order&page&limit. keepPreviousData para evitar parpadeo.
+  Paginación en servidor (Table pagination controlada).
+
+PASO 8 — Filtros, orden y Drawer (FiltersPanel + FiltersDrawer)
+  Campos:
+   - Nombre (Input con debounce 400 ms).
+   - Teléfono (Input, solo dígitos/+).
+   - Fecha de registro individual (DatePicker) O rango (RangePicker):
+     Segmented/Radio "Fecha única | Rango" que alterna el control.
+   - Acceso: TOGGLE SWITCH (Switch) con tri-estado práctico:
+       "Solo con acceso" (checked) / sin filtro. Alternativa: Switch +
+       Checkbox "Solo restringidos"; recomendado: Segmented
+       [Todos | Con acceso | Restringidos] o Switch que filtre "con acceso".
+       Requisito: debe haber un toggle -> usar Switch "Mostrar solo con acceso"
+       y un segundo Switch "Mostrar solo restringidos" mutuamente excluyentes.
+   - Ordenar por: Select (Nombre, Fecha de registro, Acceso) + dirección
+     asc/desc (Segmented con iconos).
+   - Botones: "Limpiar filtros" y "Aplicar".
+  FiltersDrawer: <Drawer placement="right" width={360} (100% en ≤576px)>.
+   En escritorio puede mostrarse el panel en línea si hay espacio; en
+   ≤992px siempre Drawer deslizante desde la derecha.
+  Los filtros viven en un objeto de estado (o en la URL con useSearchParams
+  para poder compartir/recargar).
+
+PASO 9 — Vista tabla y vista data cards
+  UsersTable (≥ 576px): columnas: ID (publicId), Nombre, Teléfono, Fecha de
+   registro, Acceso (AccessSwitch), Acciones (Editar, Generar acceso,
+   Eliminar). Ordenable por columnas conectadas a sortBy/order.
+  UserCards (< 576px, vía Grid.useBreakpoint): lista de <Collapse> o Cards
+   colapsables: cabecera = nombre + Switch de acceso; al expandir = teléfono,
+   ID, fecha, y botones de acción en fila (acciones a ancho completo).
+  Misma data y mismos handlers para ambas vistas.
+
+PASO 10 — Formularios y acciones
+  UserFormModal (alta/edición, Form de AntD):
+   - fullName: requerido, 2–120, trim.
+   - phone: requerido, regex ^\+?\d{7,15}$, normalizar.
+   - NO hay campos de fecha ni ID: los genera el servidor automáticamente.
+   - Mostrar errores 400/409 del backend por campo.
+  AccessSwitch: Switch con loading; al cambiar -> PATCH /:id/access; update
+   optimista con rollback si falla; mensaje de confirmación.
+  Generar acceso: botón -> Popconfirm ("Se generará una nueva clave; la
+   anterior dejará de funcionar") -> POST /:id/credentials -> CredentialsModal
+   muestra usuario + contraseña con botón "Copiar" y aviso "Se muestra una sola
+   vez". Al cerrar, limpiar el valor del estado. No guardar en storage ni logs.
+  Eliminar: Modal.confirm de peligro (danger) que exige confirmar
+   explícitamente ("Eliminar definitivamente"), acción irreversible ->
+   DELETE /:id -> invalidar query.
+  Notificaciones: message/notification de AntD para éxito/error.
+
+PASO 11 — Rutas (App.jsx)
+  /login  -> LoginPage (si ya hay sesión, redirige a /)
+  /       -> ProtectedRoute -> UsersPage
+  *       -> redirección a /
+  Lazy loading (React.lazy + Suspense) de páginas para reducir bundle.
+
+PASO 12 — Accesibilidad y UX
+  - Contraste AA del texto sobre fondos translúcidos (verificar #c9d8e8 /
+    #7aafc8).
+  - Foco visible, aria-labels en iconos/switches, navegación por teclado en
+    Drawer y Modales (AntD ya gestiona focus trap).
+  - prefers-reduced-motion respetado.
+
+PASO 13 — Seguridad del front (checklist)
+  [ ] Token de acceso solo en memoria; refresh por cookie httpOnly.
+  [ ] Sin dangerouslySetInnerHTML; React escapa contenido por defecto.
+  [ ] Sin secretos ni contraseñas en el código ni en variables VITE_.
+  [ ] Contraseña generada visible solo en el modal y limpiada al cerrar.
+  [ ] Confirmaciones para acciones destructivas.
+  [ ] Manejo de 401/403/429 con mensajes genéricos.
+  [ ] npm audit; dependencias con versiones fijadas (package-lock).
+  [ ] Cabeceras de seguridad del Static Site en Render (render.yaml headers):
+      X-Frame-Options: DENY, X-Content-Type-Options: nosniff,
+      Referrer-Policy: no-referrer, Content-Security-Policy restrictivo
+      (connect-src hacia la URL del backend).
+  [ ] El backend aplica CORS con la URL exacta de este front.
+
+PASO 14 — Pruebas
+  - Vitest + Testing Library: render de EmptyState cuando no hay datos,
+    FiltersPanel emite filtros correctos, formulario valida teléfono, toggle
+    llama a la API (mock con msw).
+  - Prueba manual responsive: 360px, 400px, 576px, 768px, 992px, 1100px, 1440px.
+
+PASO 15 — GitHub
+  .gitignore: node_modules, dist, .env, .env.*, !.env.example
+  git add . ; git commit -m "feat: panel TIL_Superadmin"
+  git branch -M main
+  git remote add origin https://github.com/adrianrico/TIL_Superadmin.git
+  git push -u origin main
+
+PASO 16 — Despliegue manual en Render (Static Site)
+  1) Render > New > Static Site > repo TIL_Superadmin.
+  2) Build Command: npm ci && npm run build ; Publish Directory: dist
+  3) Environment: VITE_API_URL=https://<tu-api>.onrender.com/api/v1
+     (se inyecta en build; si cambia, hay que reconstruir).
+  4) Redirect/Rewrite: /*  ->  /index.html  (Rewrite) para React Router.
+  5) Auto-Deploy: OFF; usar "Manual Deploy".
+  6) Actualizar CORS_ORIGINS del backend con la URL final del front y
+     redeploy del backend.
+  7) Probar login, alta, filtros, toggle, generación de clave y eliminación.
+  Nota: Static Sites en Render no "duermen"; solo el backend gratuito sí.
+
+--------------------------------------------------------------------------------
+3. HITOS
+--------------------------------------------------------------------------------
+  H1: Pasos 1–5   (proyecto, tema, fondo de olas, loader)           -> visual listo
+  H2: Paso 6, 11  (login, sesión, rutas protegidas) con backend H2
+  H3: Pasos 7–9   (listado, filtros, drawer, tabla/cards)
+  H4: Paso 10     (alta/edición, toggle, claves, eliminar)
+  H5: Pasos 12–14 (accesibilidad, seguridad, pruebas)
+  H6: Pasos 15–16 (GitHub + Render)
+
+Dependencia: el front puede avanzar con datos simulados (msw) mientras el
+backend completa H3/H4 del plan TIL_Backend.
+================================================================================
